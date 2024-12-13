@@ -4,18 +4,18 @@ use mod_eigenvalues
 use matrix_fun
 use bouwkamp
 use ang_func
-use legendre
+use utils
 implicit none
 
 ! real(knd)					:: res_arr(5), mtr(5,2)
 integer						:: NN, i, j, m, n, n0, lwork, info, ldvl, ldvr, p, s, eta_num, m0, m_step, m_num, i_m
-integer(knd)				:: ii
+integer			:: ii
 real(knd)					:: rr, nu, eta0, eta_step
 ! complex(knd), allocatable :: mtr_c(:,:), mtr_c2(:,:), mtr_c3(:,:)
 ! real(knd), allocatable :: mtr_c4(:,:)
 complex(knd)				:: c, f, dl, c1, c2(5), c3(4,5)
 complex(knd), allocatable	:: mtr_mini(:,:), eig_arr(:), mtr(:,:), mtr2(:,:), work(:), vl(:,:), vr(:,:),&
- mtr_mini_all(:,:), f_arr(:), f_arr0(:), fff(:), Smn_eta_n(:,:)
+ mtr_mini_all(:,:), f_arr(:), f_arr0, fff(:), Smn_eta_n(:,:)
 ! complex(8), allocatable		:: mtr_mini_8(:,:), eig_arr_8(:), mtr_8(:,:), mtr_mini_all_8(:,:)
 real(knd), allocatable		:: rwork(:), eta_arr(:)
 character(4)				:: norm
@@ -48,26 +48,37 @@ read(1,*) eta0, eta_step, eta_num
 read(1,*) norm
 close(1)
 
+
 allocate(eta_arr(eta_num))
 eta_arr = [real(knd) :: (eta0+i*eta_step, i=0, eta_num-1)]
 ! m = 0
 ! n = 6
 ! f = S_mn(c, 0._knd, m, 1, "Meix")
 ! c2 = S_mn_eta(c, [real(knd) :: 0, 0.25, 0.5, 0.75, 1], m, 1, "Meix")
-open(2, file='/home/sergey/kypca4/vb/build/output.txt')
+! open(2, file='/home/sergey/kypca4/vb/build/output.txt')
+open(2, file='../output.txt')
 ! open(3, file='../log.txt')
+open(25, file='../eig.txt')
 
 do i_m=0, m_num-1
 	m = m0 + i_m*m_step
 	n = n0 + m
 
-	allocate(Smn_eta_n(m:n,eta_num))
+	allocate(Smn_eta_n(m:n,eta_num), fff(eta_num))
 
 	if (norm == "Flam") then
 		Smn_eta_n = S_mn_eta_n(c, eta_arr, m, n)
 	else
 		Smn_eta_n = S_mn_eta_n(c, eta_arr, m, n, norm)
 	end if
+
+	fff =  S_mn_eta(c, eta_arr, m, n, norm)
+	print*, "tttt", fff
+
+	ii = 3
+	f_arr0 =  S_mn(c, eta_arr(ii), m, n, norm)
+	print*, "tttt1", f_arr0, eta_arr(ii)
+
 	! f = S_mn(c, 0.0_knd, 0, 6)
 	! print*, f
 	! print*, "-------"
@@ -121,13 +132,16 @@ print*, "m", m
 print*, "n", n
 print*, "c", c
 print*, "nu", nu
+close(25)
+
+
 
 ! do i=0, 12
 ! c1 = S_mn(c, 0.2_knd, 0, i, norm)
 ! print*, i, c1
 ! end do
-	c1 = S_mn(c, 0.2_knd, 0, 13, norm)
-	print*, c1
+	! c1 = S_mn(c, 0.2_knd, 0, 13, norm)
+	! print*, c1
 ! m = 5
 ! rr = 1q0
 ! 	do i=2*m-1, 1, -2

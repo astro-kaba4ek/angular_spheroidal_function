@@ -2,53 +2,10 @@ module mod_eigenvalues
 use regime
 use matrix_fun
 use bouwkamp
+use utils
 implicit none
 
 contains
-
-! Процедура bisecn0(aa,bb,epsx,epsy,res,iter,ier) находит методом деления
-! отрезка [aa,bb] пополам изолированный на нём корень уравнения f(x)=0.
-! Входные аргументы: aa - левая граница промежутка; bb - правая граница;
-! epsx - точность по аргументу; epsy - точность по функции.
-! Выходные аргументы: res - найденная величина корня;
-! k - число уточнений, за которое достигнуты требуемые критерии точности;
-! ier - код причины завершения работы bisecn0:
-! 0 - достигнуты критерии точности и по функции, и по аргументу;
-! 1 - число дроблений отрезка > kmax=32000 (но точность не достигнута);
-! 2 - корень не искался, т.к. f(aa) и f(bb) одного знака (нет корня).
-! subroutine bisecn0(aa,bb,epsx,epsy,res,k,ier)
-! 	real(knd) aa, bb, epsx, epsy, res, f, a, b, c, fa, fb, fc
-! 	integer k, ier, kmax / 1000 / 
-! 	a=aa; b=bb; fa=f(a); fb=f(b)
-
-! 	if ( (fa*fb).le.0d0 ) then    ! Если f(x) перескает ось абсцисс, то:
-! 		k=0                           ! Обнуляем число сужений промежутка.
-! 		do
-! 			c=(a+b)*0.5d0; fc=f(c)
-! 				! Находим середину промежутка (с) и f(c).
-! 			if ( fa*fc.gt.0d0) then       ! Если корень в правой половине отрезка,
-! 				a=c; fa=fc
-! 			else              ! смещаем левую границу
-! 				b=c; fb=fc                    ! если в левой - смещаем правую.
-! 			endif !
-
-! 			k=k+1                         ! Увеличиваем счетчик сужений
-! 			if ((k.gt.kmax).or.&          ! Если число сужений больше допустимого
-! 			& (dabs(b-a).lt.epsx.and.&    ! ИЛИ одновременно достигнуты точности
-! 			& dabs(fc ).lt.epsy)) exit    ! и по аргументу и по функции, то
-! 		enddo   							! выходим из цикла.
-
-! 		res=(a+b)*0.5d0               ! Фиксируем найденное значение корня.
-
-! 		if (k.le.kmax) then
-! 			ier=0    ! Если число сужений в норме, то код = 0
-! 		else
-! 			ier=1                   ! иначе код завершения = 1
-! 		endif
-! 	else
-! 		ier=2                   ! Если f(x) НЕ ПЕРЕСЕКАЕТ ось абсцисс, код = 2
-! 	endif
-! end subroutine bisecn0
 
 
 recursive function characteristic_polynomial(lambda, k, mtr) result(res)
@@ -380,13 +337,13 @@ function find_eig(mtr_mini_all, NN, n, m, info) result(eig_arr)
 	integer, intent(in)		:: NN, n, m 
 	complex(8), intent(in)	:: mtr_mini_all(NN/2,4) ! == DFE_matr_mini_b_full(NN, n, m, c)
 
-	integer					:: lwork, ldvl, ldvr, i, j
+	integer					:: lwork, ldvl, ldvr, i, j, A_ind(NN), T_ind(NN)
 	real(8)					:: rwork(2*NN)
 	complex(8) 				:: mtr(NN,NN) 
 	complex(8), allocatable	:: work(:), vl(:,:), vr(:,:)
 
 	integer, intent(inout)	:: info
-	complex(8) 				:: eig_arr(NN), eig_arr1(NN/2), eig_arr2(NN/2), eig
+	complex(8) 				:: eig_arr(NN), eig_arr1(NN/2), eig_arr2(NN/2), eig, T((NN+1)/2), T12((NN/2+1)/2)
 
 	! print*, "hhh", mtr_mini_all(:,:2)
 	! print*, "hhh", mtr_mini_all(:,3:)
@@ -396,47 +353,64 @@ function find_eig(mtr_mini_all, NN, n, m, info) result(eig_arr)
 	eig_arr1 = eig_by_cgeev2(mtr_mini_all(:,:2), NN/2, info)
 	eig_arr2 = eig_by_cgeev2(mtr_mini_all(:,3:), NN/2, info)
 
-	print*, "t0", eig_arr1
-	print*, "t0", eig_arr2
+	! print*, "t0", eig_arr1
+	! print*, "t0", eig_arr2
 
 	if (real(eig_arr1(1)) > real(eig_arr1(NN/2))) eig_arr1 = eig_arr1(NN/2:1:-1)
 	if (real(eig_arr2(1)) > real(eig_arr2(NN/2))) eig_arr2 = eig_arr2(NN/2:1:-1)
 
-	do i=1, NN/2-1
-		if (real(eig_arr1(i)) > real(eig_arr1(i+1))) then
-			eig = eig_arr1(i)
-			eig_arr1(i) = eig_arr1(i+1)
-			eig_arr1(i+1) = eig
-		end if
-		if (real(eig_arr2(i)) > real(eig_arr2(i+1))) then
-			eig = eig_arr2(i)
-			eig_arr2(i) = eig_arr2(i+1)
-			eig_arr2(i+1) = eig
-		end if
-	end do
+	! do i=1, NN/2-1
+	! 	if (real(eig_arr1(i)) > real(eig_arr1(i+1))) then
+	! 		eig = eig_arr1(i)
+	! 		eig_arr1(i) = eig_arr1(i+1)
+	! 		eig_arr1(i+1) = eig
+	! 	end if
+	! 	if (real(eig_arr2(i)) > real(eig_arr2(i+1))) then
+	! 		eig = eig_arr2(i)
+	! 		eig_arr2(i) = eig_arr2(i+1)
+	! 		eig_arr2(i+1) = eig
+	! 	end if
+	! end do
+
+
+
+	call MergeSort8(eig_arr1, NN/2, T12)
+	call MergeSort8(eig_arr2, NN/2, T12)
+	! print*, "t0", eig_arr1
+	! print*, "t0", eig_arr2
+
+
 
 
 	if (mod(n-m, 2) == 0) then
-		do i=1, NN/2
-			eig_arr(2*i-1) = eig_arr1(i)
-			eig_arr(2*i) = eig_arr2(i)
-		end do
+		! do i=1, NN/2
+		! 	eig_arr(2*i-1) = eig_arr1(i)
+		! 	eig_arr(2*i) = eig_arr2(i)
+		! end do
+		eig_arr(1:NN:2) = eig_arr1
+		eig_arr(2:NN:2) = eig_arr2
 	else
-		do i=1, NN/2
-			eig_arr(2*i-1) = eig_arr2(i)
-			eig_arr(2*i) = eig_arr1(i)
-		end do
+		! do i=1, NN/2
+		! 	eig_arr(2*i-1) = eig_arr2(i)
+		! 	eig_arr(2*i) = eig_arr1(i)
+		! end do
+		eig_arr(1:NN:2) = eig_arr2
+		eig_arr(2:NN:2) = eig_arr1
 	end if
 
-	! do j=1, NN+10
-		do i=1, NN-1
-			if (real(eig_arr(i)) > real(eig_arr(i+1))) then
-				eig = eig_arr(i)
-				eig_arr(i) = eig_arr(i+1)
-				eig_arr(i+1) = eig
-			end if
-		end do
-	! end do
+
+
+	! ! do j=1, NN+10
+	! 	do i=1, NN-1
+	! 		if (real(eig_arr(i)) > real(eig_arr(i+1))) then
+	! 			eig = eig_arr(i)
+	! 			eig_arr(i) = eig_arr(i+1)
+	! 			eig_arr(i+1) = eig
+	! 		end if
+	! 	end do
+	! ! end do
+	call MergeSort8(eig_arr, NN, T)
+
 
 
 	! print*, "tt", eig_arr1
@@ -453,11 +427,11 @@ function find_eig_corrected(NN, n, m, c) result(eig_arr_corr)
 	integer, intent(in)			:: NN, n, m 
 	complex(knd), intent(in)	:: c
 
-	integer						:: i, info, j
-	complex(knd)				:: eig_arr(m:m+NN-1), mtr_mini_all(NN/2,4), dl, eig
+	integer						:: i, info, j, count
+	complex(knd)				:: eig_arr(m:m+NN-1), mtr_mini_all(NN/2,4), dl, eig, dl0, T((NN+1)/2)
 	complex(8)					:: eig_arr_8(m:m+NN-1), mtr_mini_all_8(NN/2,4)
 
-	complex(knd)				:: eig_arr_corr(m:m+NN-1)
+	complex(knd)				:: eig_arr_corr(m:m+NN-1), eig_arr_corr0(m:m+NN-1)
 
 
 	if (c == complex(0_knd, 0_knd)) then
@@ -489,17 +463,49 @@ function find_eig_corrected(NN, n, m, c) result(eig_arr_corr)
 			! 	dl = delta_lambda(m, c, eig_arr(11), 11-m)
 			! 	eig_arr_corr(i) = eig_arr(11) + dl
 			! else
-				dl = delta_lambda(m, c, eig_arr(i), i-m)
-				eig_arr_corr(i) = eig_arr(i) + dl
+				dl0 = delta_lambda(m, c, eig_arr(i), i-m)
+				eig_arr_corr(i) = eig_arr(i) + dl0
+				count = 1
+				do while (.true.)
+					count = count + 1
+					dl = delta_lambda(m, c, eig_arr_corr(i), i-m)
+					eig_arr_corr(i) = eig_arr_corr(i) + dl
+					! if (abs(dl)/abs(eig_arr_corr(i)) < 0.001_knd .or. count > 50) exit
+					if (abs(dl) < 1q-12 .or. count > 100) exit
+				end do
+				if (abs(dl) > 0.1) eig_arr_corr(i) = eig_arr(i)
+
+				! dl = delta_lambda(m, c, eig_arr_corr(i), i-m)
+				! eig_arr_corr(i) = eig_arr_corr(i) + dl
+				! dl = delta_lambda(m, c, eig_arr_corr(i), i-m)
+				! eig_arr_corr(i) = eig_arr_corr(i) + dl
+
 			! end if
-			write(*,5) i-m, i, eig_arr(i), eig_arr_corr(i), dl
-			5	format(1x,i3, 1x,i3, 1x,f40.30,f40.30," |", 1x,f40.30,f40.30," |", 1x,f40.30,f40.30)
+			! write(25,5) i-m, i, eig_arr(i), eig_arr_corr(i), dl, dl0
+			! 5	format(1x,i3, 1x,i3," |", 1x,f40.30,f40.30," |", 1x,f40.30,f40.30," |", 1x,f40.30,f40.30," |", 1x,f40.30,f40.30)
 			! dl = delta_lambda(m, c, eig_arr(i), i-m)
 			! print*, i-m, i, eig_arr(i)+dl, dl
 			! ! print*, i, eig_arr(i)+dl
 			
 			! eig_arr_corr(i) = eig_arr(i) + dl
 		end do
+		! call MergeSort(eig_arr_corr, NN, T)
+
+
+		! eig_arr_corr0 = eig_arr_corr
+		! eig_arr_corr(10) = eig_arr_corr0(12)
+		! eig_arr_corr(11) = eig_arr_corr0(13)
+		! eig_arr_corr(12) = eig_arr_corr0(10)
+		! eig_arr_corr(13) = eig_arr_corr0(11)
+		do i = m, m+NN-1
+			
+			write(25,5) m, i, eig_arr(i), eig_arr_corr(i), dl
+			5	format(1x,i3, 1x,i3," |", 1x,f40.30,f40.30," |", 1x,f40.30,f40.30," |", 1x,f40.30,f40.30)
+			
+		end do
+
+		! eig_arr_corr = eig_arr
+
 
 		! do j=1, NN+10
 		! 	do i=1, NN-1

@@ -22,7 +22,7 @@ set(SOURCES
 	src/mod_eigenvalues.f95
 	src/bouwkamp.f95
 	src/ang_func.f95
-	src/legendre.f95
+	src/utils.f95
 )
 add_executable(main src/prog.f95 ${SOURCES})
 target_link_libraries(main LAPACK::LAPACK)
